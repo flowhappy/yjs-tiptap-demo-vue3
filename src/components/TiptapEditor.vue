@@ -1,6 +1,6 @@
-<!-- 文件路径: src/App.vue -->
 <template>
-  <div class="editor-container">
+  <div class="editor-wrapper">
+    <!-- Tiptap 工具栏 -->
     <div v-if="editor" class="toolbar">
       <button @click="editor.chain().focus().toggleBold().run()" :class="{ 'is-active': editor.isActive('bold') }">
         Bold
@@ -18,7 +18,9 @@
         Code
       </button>
     </div>
-    <editor-content :editor="editor" />
+
+    <!-- Tiptap 编辑器实例 -->
+    <editor-content :editor="editor" class="editor-content-area" />
   </div>
 </template>
 
@@ -39,68 +41,41 @@ const roomName = 'tiptap-demo-room';
 const websocketUrl = 'ws://localhost:1234';
 const provider = new WebsocketProvider(websocketUrl, roomName, ydoc);
 
-// --- 用户信息和光标颜色 ---
+// --- 用户信息 ---
 const userColor = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
 const userName = 'User ' + Math.floor(Math.random() * 100);
 
 // --- Tiptap 编辑器实例 ---
 const editor = useEditor({
   extensions: [
-    StarterKit.configure({
-      history: false, // 使用 Yjs 的历史记录
-    }),
-    Collaboration.configure({
-      document: ydoc,
-    }),
+    StarterKit.configure({ history: false }),
+    Collaboration.configure({ document: ydoc }),
     CollaborationCursor.configure({
       provider: provider,
-      user: {
-        name: userName,
-        color: userColor,
-      },
+      user: { name: userName, color: userColor },
     }),
   ],
 });
 
-// 组件卸载时清理资源
 onUnmounted(() => {
-  if (provider) {
-    provider.destroy();
-  }
-  if (ydoc) {
-    ydoc.destroy();
-  }
+  if (provider) provider.destroy();
+  if (ydoc) ydoc.destroy();
 });
 </script>
 
 <style>
 /*
-  为了简化，这里使用全局样式。
-  注意：scoped 样式对 Tiptap 渲染的 HTML 不起作用，
-  因为它们不是组件模板的一部分。
+  重要提示：这里的样式没有使用 `scoped`。
+  因为 Tiptap 渲染的 .ProseMirror 元素不在 Vue 组件的模板内，
+  `scoped` 样式无法应用到它。所以我们将这些样式保持全局，但通过父选择器 .editor-wrapper 限定作用域。
 */
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-  margin: 0;
-  background-color: #f0f2f5;
+.editor-wrapper {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-}
-
-#app {
-  width: 100%;
-}
-
-.editor-container {
-  max-width: 900px;
-  margin: 2rem auto;
-  padding: 20px;
+  flex-direction: column;
+  height: 100vh; /* 撑满父容器高度 */
   background-color: #f9f9f9;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
+  box-sizing: border-box;
 }
 
 .toolbar {
@@ -112,6 +87,7 @@ body {
   background-color: #fff;
   border: 1px solid #ccc;
   border-radius: 5px;
+  flex-shrink: 0; /* 防止工具栏被压缩 */
 }
 
 .toolbar button {
@@ -123,29 +99,31 @@ body {
   transition: background-color 0.2s;
 }
 
-.toolbar button:hover {
-  background-color: #f0f0f0;
-}
-
 .toolbar button.is-active {
   background-color: #333;
   color: #fff;
 }
 
-.ProseMirror {
-  min-height: 400px;
-  padding: 1rem;
+.editor-content-area {
+  flex-grow: 1; /* 占据所有剩余空间 */
+  overflow-y: auto; /* 内容过多时滚动 */
   background-color: #fff;
   border-radius: 5px;
   border: 1px solid #ccc;
+}
+
+.ProseMirror {
+  padding: 1rem;
   outline: none;
+  height: 100%; /* 继承父容器高度 */
 }
 
 .ProseMirror:focus {
-  border-color: #66afe9;
+  border-color: transparent;
+  box-shadow: none;
 }
 
-/* --- 协同光标样式 --- */
+/* 协同光标样式 */
 .collaboration-cursor__caret {
   position: relative;
   margin-left: -1px;
