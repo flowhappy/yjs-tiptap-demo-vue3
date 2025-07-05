@@ -10,9 +10,11 @@
   "dependencies": {
     "@tiptap/extension-collaboration": "^2.24.2",
     "@tiptap/extension-collaboration-cursor": "^2.24.2",
+    "@tiptap/extension-text-align": "^2.24.2",
     "@tiptap/starter-kit": "^2.24.2",
     "@tiptap/vue-3": "^2.24.2",
     "core-js": "^3.8.3",
+    "lucide-vue-next": "^0.525.0",
     "vue": "^3.2.13",
     "y-websocket": "^3.0.0",
     "yjs": "^13.6.27"

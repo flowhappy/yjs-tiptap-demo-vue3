@@ -1,47 +1,114 @@
 <template>
   <div class="editor-wrapper">
-    <!-- Tiptap 工具栏 -->
+    <!-- 全新升级的工具栏 -->
     <div v-if="editor" class="toolbar">
-      <button @click="editor.chain().focus().toggleBold().run()" :class="{ 'is-active': editor.isActive('bold') }">
-        Bold
-      </button>
-      <button @click="editor.chain().focus().toggleItalic().run()" :class="{ 'is-active': editor.isActive('italic') }">
-        Italic
-      </button>
-      <button @click="editor.chain().focus().toggleHeading({ level: 1 }).run()" :class="{ 'is-active': editor.isActive('heading', { level: 1 }) }">
-        H1
-      </button>
-      <button @click="editor.chain().focus().toggleHeading({ level: 2 }).run()" :class="{ 'is-active': editor.isActive('heading', { level: 2 }) }">
-        H2
-      </button>
-      <button @click="editor.chain().focus().toggleCodeBlock().run()" :class="{ 'is-active': editor.isActive('codeBlock') }">
-        Code
-      </button>
+      <!-- 预览按钮和分组分隔线 -->
+      <div class="toolbar-group">
+        <button @click="togglePreview" :class="{ 'is-active': isPreviewMode }" title="预览/编辑">
+          <component :is="isPreviewMode ? BookOpen : Code" />
+        </button>
+      </div>
+
+      <!-- 标题下拉菜单 -->
+      <div class="toolbar-group">
+        <select v-model="activeHeadingLevel" @change="handleHeadingChange" class="heading-select" title="标题">
+          <option value="0">段落</option>
+          <option value="1">标题 1</option>
+          <option value="2">标题 2</option>
+          <option value="3">标题 3</option>
+        </select>
+      </div>
+
+      <!-- 基础文本格式 -->
+      <div class="toolbar-group">
+        <button @click="editor.chain().focus().toggleBold().run()" :disabled="!editor.can().chain().focus().toggleBold().run()" :class="{ 'is-active': editor.isActive('bold') }" title="加粗">
+          <Bold />
+        </button>
+        <button @click="editor.chain().focus().toggleItalic().run()" :disabled="!editor.can().chain().focus().toggleItalic().run()" :class="{ 'is-active': editor.isActive('italic') }" title="斜体">
+          <Italic />
+        </button>
+        <button @click="editor.chain().focus().toggleStrike().run()" :disabled="!editor.can().chain().focus().toggleStrike().run()" :class="{ 'is-active': editor.isActive('strike') }" title="删除线">
+          <Strikethrough />
+        </button>
+        <button @click="editor.chain().focus().toggleCode().run()" :disabled="!editor.can().chain().focus().toggleCode().run()" :class="{ 'is-active': editor.isActive('code') }" title="行内代码">
+          <Code />
+        </button>
+      </div>
+
+      <!-- 对齐方式 -->
+      <div class="toolbar-group">
+        <button @click="editor.chain().focus().setTextAlign('left').run()" :class="{ 'is-active': editor.isActive({ textAlign: 'left' }) }" title="左对齐">
+          <AlignLeft />
+        </button>
+        <button @click="editor.chain().focus().setTextAlign('center').run()" :class="{ 'is-active': editor.isActive({ textAlign: 'center' }) }" title="居中对齐">
+          <AlignCenter />
+        </button>
+        <button @click="editor.chain().focus().setTextAlign('right').run()" :class="{ 'is-active': editor.isActive({ textAlign: 'right' }) }" title="右对齐">
+          <AlignRight />
+        </button>
+      </div>
+
+      <!-- 列表和块级元素 -->
+      <div class="toolbar-group">
+        <button @click="editor.chain().focus().toggleBulletList().run()" :class="{ 'is-active': editor.isActive('bulletList') }" title="项目符号">
+          <List />
+        </button>
+        <button @click="editor.chain().focus().toggleOrderedList().run()" :class="{ 'is-active': editor.isActive('orderedList') }" title="数字列表">
+          <ListOrdered />
+        </button>
+        <button @click="editor.chain().focus().toggleBlockquote().run()" :class="{ 'is-active': editor.isActive('blockquote') }" title="引用">
+          <Quote />
+        </button>
+        <button @click="editor.chain().focus().toggleCodeBlock().run()" :class="{ 'is-active': editor.isActive('codeBlock') }" title="代码块">
+          <FileCode />
+        </button>
+      </div>
+
+      <!-- 插入元素 -->
+      <div class="toolbar-group">
+        <button @click="editor.chain().focus().setHorizontalRule().run()" title="水平分割线">
+          <Minus />
+        </button>
+      </div>
+
     </div>
 
-    <!-- Tiptap 编辑器实例 -->
-    <editor-content :editor="editor" class="editor-content-area" />
+    <!-- 编辑区和预览区 -->
+    <div class="content-container">
+      <editor-content v-show="!isPreviewMode" :editor="editor" class="editor-content-area" />
+      <div v-if="isPreviewMode" v-html="previewContent" class="preview-area ProseMirror"></div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { onUnmounted } from 'vue';
+import { ref, onUnmounted, computed, watch } from 'vue';
 
-// Tiptap 和 Yjs 相关导入
+// Tiptap 和 Yjs
 import { useEditor, EditorContent } from '@tiptap/vue-3';
 import StarterKit from '@tiptap/starter-kit';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
+import TextAlign from '@tiptap/extension-text-align'; // 引入文本对齐扩展
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 
-// --- Yjs 设置 ---
+// 引入图标
+import {
+  Bold, Italic, Strikethrough, Code, List, ListOrdered, Quote, Minus,
+  AlignLeft, AlignCenter, AlignRight, FileCode, BookOpen
+} from 'lucide-vue-next';
+
+
+// --- 状态管理 ---
+const isPreviewMode = ref(false);
+
+// --- Yjs 设置 (保持不变) ---
 const ydoc = new Y.Doc();
 const roomName = 'tiptap-demo-room';
 const websocketUrl = 'ws://localhost:1234';
 const provider = new WebsocketProvider(websocketUrl, roomName, ydoc);
 
-// --- 用户信息 ---
 const userColor = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
 const userName = 'User ' + Math.floor(Math.random() * 100);
 
@@ -54,8 +121,43 @@ const editor = useEditor({
       provider: provider,
       user: { name: userName, color: userColor },
     }),
+    // 配置文本对齐扩展
+    TextAlign.configure({
+      types: ['heading', 'paragraph'],
+    }),
   ],
 });
+
+// --- 预览逻辑 ---
+const previewContent = computed(() => editor.value ? editor.value.getHTML() : '');
+const togglePreview = () => {
+  isPreviewMode.value = !isPreviewMode.value;
+};
+
+// --- 标题下拉菜单逻辑 ---
+const activeHeadingLevel = ref(0);
+
+const handleHeadingChange = (event) => {
+  const level = parseInt(event.target.value, 10);
+  if (level === 0) {
+    editor.value.chain().focus().setParagraph().run();
+  } else {
+    editor.value.chain().focus().toggleHeading({ level: level }).run();
+  }
+};
+
+// 监听 Tiptap 编辑器状态，更新下拉菜单的显示
+watch(() => editor.value?.state.selection, () => {
+  if (!editor.value) return;
+  for (let i = 1; i <= 3; i++) {
+    if (editor.value.isActive('heading', { level: i })) {
+      activeHeadingLevel.value = i;
+      return;
+    }
+  }
+  activeHeadingLevel.value = 0;
+}, { immediate: true, deep: true });
+
 
 onUnmounted(() => {
   if (provider) provider.destroy();
@@ -64,15 +166,11 @@ onUnmounted(() => {
 </script>
 
 <style>
-/*
-  重要提示：这里的样式没有使用 `scoped`。
-  因为 Tiptap 渲染的 .ProseMirror 元素不在 Vue 组件的模板内，
-  `scoped` 样式无法应用到它。所以我们将这些样式保持全局，但通过父选择器 .editor-wrapper 限定作用域。
-*/
+/* ... 此前的 .editor-wrapper, .content-container 等样式可以保留 ... */
 .editor-wrapper {
   display: flex;
   flex-direction: column;
-  height: 100vh; /* 撑满父容器高度 */
+  height: 100vh;
   background-color: #f9f9f9;
   padding: 2rem;
   box-sizing: border-box;
@@ -81,71 +179,90 @@ onUnmounted(() => {
 .toolbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-bottom: 16px;
   padding: 8px;
   background-color: #fff;
   border: 1px solid #ccc;
   border-radius: 5px;
-  flex-shrink: 0; /* 防止工具栏被压缩 */
+  flex-shrink: 0;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  padding-right: 8px;
+  margin-right: 8px;
+  border-right: 1px solid #e0e0e0;
+}
+.toolbar-group:last-child {
+  border-right: none;
+  margin-right: 0;
+  padding-right: 0;
 }
 
 .toolbar button {
-  padding: 4px 8px;
-  border: 1px solid #ddd;
-  background-color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 4px;
+  border: none;
+  background-color: transparent;
   border-radius: 4px;
   cursor: pointer;
+  color: #333;
   transition: background-color 0.2s;
 }
 
-.toolbar button.is-active {
-  background-color: #333;
-  color: #fff;
+.toolbar button:hover {
+  background-color: #f0f0f0;
 }
 
-.editor-content-area {
-  flex-grow: 1; /* 占据所有剩余空间 */
-  overflow-y: auto; /* 内容过多时滚动 */
+.toolbar button.is-active {
+  background-color: #e0e0ff;
+  color: #333;
+}
+
+.toolbar button:disabled {
+  color: #ccc;
+  cursor: not-allowed;
+}
+
+.heading-select {
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: #fff;
+  cursor: pointer;
+}
+
+.content-container {
+  flex-grow: 1;
+  overflow-y: auto;
   background-color: #fff;
   border-radius: 5px;
   border: 1px solid #ccc;
+}
+.editor-content-area,
+.preview-area {
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .ProseMirror {
   padding: 1rem;
   outline: none;
-  height: 100%; /* 继承父容器高度 */
+  height: 100%;
 }
-
 .ProseMirror:focus {
   border-color: transparent;
   box-shadow: none;
 }
-
-/* 协同光标样式 */
-.collaboration-cursor__caret {
-  position: relative;
-  margin-left: -1px;
-  margin-right: -1px;
-  border-left: 1px solid #0D0D0D;
-  border-right: 1px solid #0D0D0D;
-  word-break: normal;
-  pointer-events: none;
-}
-
-.collaboration-cursor__label {
-  position: absolute;
-  top: -1.4em;
-  left: -1px;
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 600;
-  line-height: normal;
-  user-select: none;
-  pointer-events: none;
-  padding: 0.1rem 0.3rem;
-  border-radius: 3px 3px 3px 0;
-  white-space: nowrap;
+.preview-area {
+  padding: 1rem;
+  overflow-y: auto;
 }
 </style>
